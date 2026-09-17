@@ -1,0 +1,6 @@
+{
+  "name": "Anup Web",
+  "description": "Ultra-fast modern web browser featuring Chrome-style top address bar, Incognito private browsing mode, speed dial shortcuts, Google account sync, passwordless sign-in, session restore, and fullscreen video playback.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

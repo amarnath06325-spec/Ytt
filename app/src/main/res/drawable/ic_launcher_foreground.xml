@@ -1,0 +1,49 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Central Globe Circle -->
+    <path
+        android:pathData="M54,30 A24,24 0 1,1 53.99,30 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="32"
+                android:startY="30"
+                android:endX="76"
+                android:endY="78"
+                android:type="linear">
+                <item android:color="#2563EB" android:offset="0.0" />
+                <item android:color="#38BDF8" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Globe Inner Latitude Grid -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeAlpha="0.75"
+        android:strokeWidth="1.8"
+        android:pathData="M30,54 L78,54 M54,30 C64,38 64,70 54,78 M54,30 C44,38 44,70 54,78" />
+
+    <!-- Supersonic Speed Orbit Ring -->
+    <path
+        android:pathData="M26,62 C26,50 42,42 62,42 C82,42 90,52 86,60 C82,68 64,74 44,74 C28,74 24,68 26,62 Z"
+        android:strokeWidth="3.2"
+        android:strokeColor="#F59E0B"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Orbit Sparkle / Core dot -->
+    <path
+        android:pathData="M81,49 A4,4 0 1,1 80.99,49 Z"
+        android:fillColor="#FBBF24" />
+
+    <!-- Fast forward arrow glyph on globe center -->
+    <path
+        android:pathData="M50,47 L58,54 L50,61 Z"
+        android:fillColor="#FFFFFF" />
+</vector>

@@ -1,0 +1,67 @@
+<resources>
+    <string name="app_name">Anup Web</string>
+    <string name="search_or_type_url">Search or type URL</string>
+    <string name="google_search_hint">Search with Google or enter URL</string>
+    <string name="reload">Reload</string>
+    <string name="stop">Stop</string>
+    <string name="settings">Settings</string>
+    <string name="profile">Google Profile</string>
+    <string name="shortcuts_title">Shortcuts</string>
+    <string name="new_incognito_tab">New Incognito tab</string>
+    <string name="exit_incognito">Exit Incognito mode</string>
+    <string name="incognito_title">You’ve gone Incognito</string>
+    <string name="incognito_desc">Now you can browse privately, and other people who use this device won’t see your activity. However, downloads and bookmarks will still be saved.</string>
+    <string name="incognito_wont_save">Anup Web won\'t save:</string>
+    <string name="incognito_wont_save_history">• Your browsing history</string>
+    <string name="incognito_wont_save_cookies">• Cookies and site data</string>
+    <string name="incognito_wont_save_forms">• Information entered in forms</string>
+    <string name="incognito_active_badge">Incognito</string>
+    
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="account_section">Google Account</string>
+    <string name="account_sync_title">Google Account Sync</string>
+    <string name="account_not_signed_in">Not signed in. Tap to sync Google account</string>
+    <string name="account_signed_in_prefix">Synced as: %s</string>
+    <string name="sign_in">Sign In</string>
+    <string name="sign_out">Sign Out</string>
+    
+    <!-- Privacy & Security -->
+    <string name="privacy_section">Privacy &amp; Security</string>
+    <string name="clear_history">Clear Browsing History</string>
+    <string name="clear_history_summary">Remove visited pages and search entries</string>
+    <string name="clear_cache">Clear Cached Images and Files</string>
+    <string name="clear_cache_summary">Free up device storage space</string>
+    <string name="clear_cookies">Clear Cookies &amp; Site Data</string>
+    <string name="clear_cookies_summary">Signs you out of most sites</string>
+    <string name="block_popups">Block Pop-up Windows</string>
+    <string name="block_popups_summary">Prevent malicious sites from opening unauthorized popups</string>
+    
+    <!-- Search Engine -->
+    <string name="search_engine_section">Search Engine</string>
+    <string name="default_search_engine">Default Search Engine</string>
+    <string name="engine_google">Google</string>
+    <string name="engine_bing">Bing</string>
+    <string name="engine_duckduckgo">DuckDuckGo</string>
+    
+    <!-- Permissions -->
+    <string name="permissions_section">Site Permissions Manager</string>
+    <string name="perm_camera">Camera Access</string>
+    <string name="perm_camera_summary">Allow websites to request camera</string>
+    <string name="perm_mic">Microphone Access</string>
+    <string name="perm_mic_summary">Allow websites to request audio recording</string>
+    <string name="perm_location">Geolocation Access</string>
+    <string name="perm_location_summary">Allow websites to request your location</string>
+    <string name="perm_notifications">Notifications</string>
+    <string name="perm_notifications_summary">Receive web push notifications</string>
+    
+    <!-- Theme -->
+    <string name="appearance_section">Appearance</string>
+    <string name="theme_toggle">Dark Mode</string>
+    <string name="theme_toggle_summary">Follow system theme or force dark mode</string>
+    
+    <!-- About -->
+    <string name="about_section">About Anup Web</string>
+    <string name="version_info">Version 1.0 (Ultra-Fast Chromium WebView)</string>
+    <string name="default_browser_banner">Set Anup Web as Default Browser</string>
+</resources>
