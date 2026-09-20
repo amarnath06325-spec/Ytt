@@ -1,107 +1,107 @@
 package com.example
 
-import android.app.Activity
+import android.content.Context
+import android.content.Intent
 import android.util.Log
-import androidx.credentials.ClearCredentialStateRequest
-import androidx.credentials.CredentialManager
-import androidx.credentials.CustomCredential
-import androidx.credentials.GetCredentialRequest
-import androidx.credentials.exceptions.GetCredentialCancellationException
-import androidx.credentials.exceptions.GetCredentialException
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.tasks.Task
 
 object GoogleAuthHelper {
 
     private const val TAG = "GoogleAuthHelper"
 
-    // Default Web Client ID (standard placeholder or injected from env)
-    // Works with Google Identity / Credential Manager on Android
-    private const val WEB_CLIENT_ID = "492023914912-mockoauthwebclientid.apps.googleusercontent.com"
+    /**
+     * Build GoogleSignInClient with GoogleSignInOptions.DEFAULT_SIGN_IN,
+     * requesting email and ID token.
+     */
+    fun getGoogleSignInClient(context: Context): GoogleSignInClient {
+        var clientId = context.getString(R.string.default_web_client_id)
+        if (clientId.isBlank() || clientId == "YOUR_WEB_CLIENT_ID") {
+            clientId = "YOUR_WEB_CLIENT_ID"
+        }
 
-    fun signIn(
-        activity: Activity,
-        scope: CoroutineScope,
-        onSuccess: (name: String, email: String, token: String?) -> Unit,
-        onError: (String) -> Unit
+        val gsoBuilder = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+
+        // Only attach requestIdToken if a realistic OAuth client ID is provided
+        if (clientId.isNotBlank() && clientId != "YOUR_WEB_CLIENT_ID") {
+            gsoBuilder.requestIdToken(clientId)
+        }
+
+        return GoogleSignIn.getClient(context, gsoBuilder.build())
+    }
+
+    /**
+     * Prepares and launches sign-in intent after signing out previous session
+     * so that the account chooser bottom sheet is always displayed.
+     */
+    fun startSignIn(
+        client: GoogleSignInClient,
+        launcher: (Intent) -> Unit
     ) {
-        val credentialManager = CredentialManager.create(activity)
-
-        val googleIdOption = GetGoogleIdOption.Builder()
-            .setFilterByAuthorizedAccounts(false)
-            .setServerClientId(WEB_CLIENT_ID)
-            .setAutoSelectEnabled(false)
-            .build()
-
-        val request = GetCredentialRequest.Builder()
-            .addCredentialOption(googleIdOption)
-            .build()
-
-        scope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    credentialManager.getCredential(
-                        request = request,
-                        context = activity
-                    )
-                }
-
-                val credential = result.credential
-                if (credential is CustomCredential &&
-                    credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
-                ) {
-                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-                    val email = googleIdTokenCredential.id
-                    val displayName = googleIdTokenCredential.displayName ?: email.substringBefore("@")
-                    val idToken = googleIdTokenCredential.idToken
-
-                    BrowserPreferences.saveSyncedAccount(activity, displayName, email)
-                    onSuccess(displayName, email, idToken)
-                } else {
-                    val fallbackEmail = "user@gmail.com"
-                    val fallbackName = "Google User"
-                    BrowserPreferences.saveSyncedAccount(activity, fallbackName, fallbackEmail)
-                    onSuccess(fallbackName, fallbackEmail, null)
-                }
-            } catch (e: GetCredentialCancellationException) {
-                Log.d(TAG, "User dismissed Google credential bottom sheet")
-                onError("Sign in cancelled")
-            } catch (e: GetCredentialException) {
-                Log.w(TAG, "Credential Manager error: ${e.message}", e)
-                // In environments without configured Google Play Services OAuth or emulators,
-                // provide a clean fallback sync so the user's flow is never blocked
-                val fallbackEmail = "user@gmail.com"
-                val fallbackName = "Synced Account"
-                BrowserPreferences.saveSyncedAccount(activity, fallbackName, fallbackEmail)
-                onSuccess(fallbackName, fallbackEmail, "auth_token_synced")
-            } catch (e: Exception) {
-                Log.e(TAG, "Unexpected Google Sign-In error", e)
-                onError(e.message ?: "Authentication failed")
-            }
+        client.signOut().addOnCompleteListener {
+            val signInIntent = client.signInIntent
+            launcher(signInIntent)
         }
     }
 
+    /**
+     * Parses the result intent from registerForActivityResult.
+     * ZERO hardcoded or dummy fallback emails.
+     * Returns GoogleSignInAccount on success or null on failure/cancellation.
+     */
+    fun handleSignInResult(
+        data: Intent?,
+        onSuccess: (account: GoogleSignInAccount) -> Unit,
+        onError: (errorMessage: String) -> Unit
+    ) {
+        if (data == null) {
+            Log.w(TAG, "Sign-in result data intent was null")
+            onError("Sign-in cancelled or returned no data")
+            return
+        }
+
+        val task: Task<GoogleSignInAccount> = GoogleSignIn.getSignedInAccountFromIntent(data)
+        try {
+            val account = task.getResult(ApiException::class.java)
+            if (account != null && !account.email.isNullOrBlank()) {
+                Log.d(TAG, "Successfully signed in via Google Play Services: ${account.email}")
+                onSuccess(account)
+            } else {
+                Log.w(TAG, "Account result was null or missing email")
+                onError("No Google account selected")
+            }
+        } catch (e: ApiException) {
+            val statusCode = e.statusCode
+            Log.w(TAG, "Google Sign-In failed with status code $statusCode: ${e.message}")
+            val message = when (statusCode) {
+                12501 -> "Sign-in cancelled"
+                12500 -> "Google Play Services sign-in error (12500)"
+                7 -> "Network error connecting to Google Play Services"
+                else -> "Google Sign-In failed (code $statusCode)"
+            }
+            onError(message)
+        } catch (e: Exception) {
+            Log.e(TAG, "Unexpected error parsing Google Sign-In result", e)
+            onError(e.message ?: "Authentication failed")
+        }
+    }
+
+    /**
+     * Sign out current Google account and clear local preferences.
+     */
     fun signOut(
-        activity: Activity,
-        scope: CoroutineScope,
+        context: Context,
+        client: GoogleSignInClient,
         onComplete: () -> Unit
     ) {
-        val credentialManager = CredentialManager.create(activity)
-        scope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    credentialManager.clearCredentialState(ClearCredentialStateRequest())
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Clear credential state error", e)
-            } finally {
-                BrowserPreferences.clearSyncedAccount(activity)
-                onComplete()
-            }
+        client.signOut().addOnCompleteListener {
+            BrowserPreferences.clearSyncedAccount(context)
+            onComplete()
         }
     }
 }

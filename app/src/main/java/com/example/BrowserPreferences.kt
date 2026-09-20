@@ -20,6 +20,7 @@ object BrowserPreferences {
     private const val KEY_THEME_MODE = "key_theme_mode" // "system", "dark", "light"
     private const val KEY_ACCOUNT_EMAIL = "key_account_email"
     private const val KEY_ACCOUNT_NAME = "key_account_name"
+    private const val KEY_ACCOUNT_PHOTO = "key_account_photo"
     private const val KEY_DESKTOP_MODE = "key_desktop_mode"
 
     const val ENGINE_GOOGLE = "google"
@@ -128,16 +129,24 @@ object BrowserPreferences {
     }
 
     // Google Account Sync
-    fun getSyncedAccount(context: Context): Pair<String?, String?> {
+    fun getSyncedAccount(context: Context): Triple<String?, String?, String?> {
         val name = getPrefs(context).getString(KEY_ACCOUNT_NAME, null)
         val email = getPrefs(context).getString(KEY_ACCOUNT_EMAIL, null)
-        return Pair(name, email)
+        val photoUrl = getPrefs(context).getString(KEY_ACCOUNT_PHOTO, null)
+        return Triple(name, email, photoUrl)
     }
 
-    fun saveSyncedAccount(context: Context, name: String, email: String) {
+    fun saveSyncedAccount(context: Context, name: String, email: String, photoUrl: String? = null) {
         getPrefs(context).edit()
             .putString(KEY_ACCOUNT_NAME, name)
             .putString(KEY_ACCOUNT_EMAIL, email)
+            .apply {
+                if (photoUrl != null) {
+                    putString(KEY_ACCOUNT_PHOTO, photoUrl)
+                } else {
+                    remove(KEY_ACCOUNT_PHOTO)
+                }
+            }
             .apply()
     }
 
@@ -145,6 +154,7 @@ object BrowserPreferences {
         getPrefs(context).edit()
             .remove(KEY_ACCOUNT_NAME)
             .remove(KEY_ACCOUNT_EMAIL)
+            .remove(KEY_ACCOUNT_PHOTO)
             .apply()
     }
 

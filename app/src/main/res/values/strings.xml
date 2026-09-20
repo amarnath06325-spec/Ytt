@@ -60,8 +60,19 @@
     <string name="theme_toggle">Dark Mode</string>
     <string name="theme_toggle_summary">Follow system theme or force dark mode</string>
     
+    <!-- Downloads -->
+    <string name="downloads_title">Downloads</string>
+    <string name="no_downloads">No downloads yet</string>
+    <string name="no_downloads_sub">Downloaded web pages and files will appear here</string>
+    <string name="downloading_file">Downloading file…</string>
+    <string name="download_completed">Download completed</string>
+    <string name="clear_downloads">Clear list</string>
+    <string name="open_file">Open</string>
+    <string name="delete_download">Delete</string>
+
     <!-- About -->
     <string name="about_section">About Anup Web</string>
     <string name="version_info">Version 1.0 (Ultra-Fast Chromium WebView)</string>
     <string name="default_browser_banner">Set Anup Web as Default Browser</string>
+    <string name="default_web_client_id" translatable="false">YOUR_WEB_CLIENT_ID</string>
 </resources>

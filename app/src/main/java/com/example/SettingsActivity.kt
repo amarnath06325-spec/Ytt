@@ -1,5 +1,6 @@
 package com.example
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -9,20 +10,26 @@ import android.webkit.CookieManager
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.databinding.ActivitySettingsBinding
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
+    private lateinit var googleSignInClient: GoogleSignInClient
+    private lateinit var googleSignInLauncher: ActivityResultLauncher<Intent>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        initGoogleAuth()
         setupToolbar()
         setupGoogleAccountSection()
         setupSearchEngineSection()
@@ -32,50 +39,114 @@ class SettingsActivity : AppCompatActivity() {
         setupDefaultBrowserSection()
     }
 
+    private fun initGoogleAuth() {
+        googleSignInClient = GoogleAuthHelper.getGoogleSignInClient(this)
+
+        googleSignInLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            binding.btnSignInGoogle.isEnabled = true
+            if (result.resultCode == Activity.RESULT_OK) {
+                GoogleAuthHelper.handleSignInResult(
+                    data = result.data,
+                    onSuccess = { account ->
+                        val email = account.email ?: ""
+                        val name = account.displayName ?: email.substringBefore("@")
+                        val photoUrl = account.photoUrl?.toString()
+
+                        BrowserPreferences.saveSyncedAccount(
+                            this,
+                            name = name,
+                            email = email,
+                            photoUrl = photoUrl
+                        )
+
+                        Toast.makeText(this, "Signed in as $name ($email)", Toast.LENGTH_SHORT).show()
+                        updateAccountUI()
+                    },
+                    onError = { errorMessage ->
+                        Toast.makeText(this, errorMessage, Toast.LENGTH_SHORT).show()
+                        updateAccountUI()
+                    }
+                )
+            } else {
+                // User cancelled or back pressed from bottom sheet
+                Toast.makeText(this, "Sign in cancelled", Toast.LENGTH_SHORT).show()
+                updateAccountUI()
+            }
+        }
+    }
+
     private fun setupToolbar() {
         binding.btnBack.setOnClickListener {
             finish()
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        updateAccountUI()
+    }
+
     private fun setupGoogleAccountSection() {
         updateAccountUI()
 
-        binding.btnAccountAction.setOnClickListener {
-            val (name, _) = BrowserPreferences.getSyncedAccount(this)
-            if (name == null) {
-                // Sign In
-                GoogleAuthHelper.signIn(
-                    activity = this,
-                    scope = lifecycleScope,
-                    onSuccess = { signedName, email, _ ->
-                        Toast.makeText(this, "Signed in as $signedName ($email)", Toast.LENGTH_SHORT).show()
-                        updateAccountUI()
-                    },
-                    onError = { err ->
-                        Toast.makeText(this, "Sign in failed: $err", Toast.LENGTH_SHORT).show()
-                    }
-                )
-            } else {
-                // Sign Out
-                GoogleAuthHelper.signOut(this, lifecycleScope) {
-                    Toast.makeText(this, "Signed out of Google Sync", Toast.LENGTH_SHORT).show()
-                    updateAccountUI()
-                }
+        // Sign In button when signed out: clears prior sign-in and launches native chooser
+        binding.btnSignInGoogle.setOnClickListener {
+            binding.btnSignInGoogle.isEnabled = false
+            GoogleAuthHelper.startSignIn(googleSignInClient) { intent ->
+                googleSignInLauncher.launch(intent)
             }
+        }
+
+        // Sign Out button when signed in
+        binding.btnSignOutGoogle.setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Sign out of Google?")
+                .setMessage("This will pause bookmark and session syncing across your devices.")
+                .setPositiveButton("Sign Out") { _, _ ->
+                    binding.btnSignOutGoogle.isEnabled = false
+                    GoogleAuthHelper.signOut(this, googleSignInClient) {
+                        binding.btnSignOutGoogle.isEnabled = true
+                        Toast.makeText(this, "Signed out of Google Sync", Toast.LENGTH_SHORT).show()
+                        updateAccountUI()
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
     }
 
     private fun updateAccountUI() {
-        val (name, email) = BrowserPreferences.getSyncedAccount(this)
-        if (name != null && email != null) {
+        val (name, email, photoUrl) = BrowserPreferences.getSyncedAccount(this)
+        if (!name.isNullOrBlank() && !email.isNullOrBlank()) {
+            // User is signed in: Show signed-in card with verified account details, hide signed-out card
+            binding.layoutAccountSignedOut.visibility = android.view.View.GONE
+            binding.layoutAccountSignedIn.visibility = android.view.View.VISIBLE
+
             binding.tvSettingsAccountName.text = name
-            binding.tvSettingsAccountEmail.text = getString(R.string.account_signed_in_prefix, email)
-            binding.btnAccountAction.text = getString(R.string.sign_out)
+            binding.tvSettingsAccountEmail.text = email
+
+            // Display profile initial or photo
+            val firstChar = name.firstOrNull()?.uppercaseChar()?.toString() ?: "G"
+            if (!photoUrl.isNullOrBlank()) {
+                binding.tvSettingsProfileInitial.visibility = android.view.View.GONE
+                binding.ivSettingsProfilePhoto.visibility = android.view.View.VISIBLE
+                ImageLoaderHelper.loadCircularImage(
+                    lifecycleScope,
+                    binding.ivSettingsProfilePhoto,
+                    photoUrl
+                )
+            } else {
+                binding.ivSettingsProfilePhoto.visibility = android.view.View.VISIBLE
+                binding.tvSettingsProfileInitial.visibility = android.view.View.VISIBLE
+                binding.tvSettingsProfileInitial.text = firstChar
+            }
         } else {
-            binding.tvSettingsAccountName.text = getString(R.string.account_sync_title)
-            binding.tvSettingsAccountEmail.text = getString(R.string.account_not_signed_in)
-            binding.btnAccountAction.text = getString(R.string.sign_in)
+            // User is signed out: Keep 'Sign In with Google' button visible
+            binding.layoutAccountSignedIn.visibility = android.view.View.GONE
+            binding.layoutAccountSignedOut.visibility = android.view.View.VISIBLE
+            binding.btnSignInGoogle.isEnabled = true
         }
     }
 

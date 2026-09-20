@@ -2,35 +2,51 @@ package com.example
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Message
+import android.view.Gravity
 import android.view.KeyEvent
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
+import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.PopupWindow
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.databinding.ActivityMainBinding
+import com.example.databinding.PopupChromeMenuBinding
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class MainActivity : AppCompatActivity() {
 
@@ -49,6 +65,37 @@ class MainActivity : AppCompatActivity() {
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
     private var defaultUserAgent: String = ""
 
+    // Pending Download State for runtime permission request
+    private var pendingDownloadUrl: String? = null
+    private var pendingDownloadUserAgent: String? = null
+    private var pendingDownloadContentDisposition: String? = null
+    private var pendingDownloadMimeType: String? = null
+
+    // BroadcastReceiver for DownloadManager completion
+    private var downloadCompleteReceiver: BroadcastReceiver? = null
+
+    // Runtime Permission Launcher
+    private val requestStoragePermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) {
+                val url = pendingDownloadUrl
+                if (url != null) {
+                    executeNativeDownload(
+                        url = url,
+                        userAgent = pendingDownloadUserAgent ?: defaultUserAgent,
+                        contentDisposition = pendingDownloadContentDisposition,
+                        mimeType = pendingDownloadMimeType
+                    )
+                }
+            } else {
+                Toast.makeText(this, "Storage permission is required to save downloads", Toast.LENGTH_LONG).show()
+            }
+            pendingDownloadUrl = null
+            pendingDownloadUserAgent = null
+            pendingDownloadContentDisposition = null
+            pendingDownloadMimeType = null
+        }
+
     // Runtime Permission Launcher
     private val requestPermissionsLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
@@ -66,6 +113,44 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    // Google Sign In Client & ActivityResultLauncher
+    private lateinit var googleSignInClient: GoogleSignInClient
+    private val googleSignInLauncher: ActivityResultLauncher<Intent> =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                GoogleAuthHelper.handleSignInResult(
+                    data = result.data,
+                    onSuccess = { account ->
+                        val email = account.email ?: ""
+                        val name = account.displayName ?: email.substringBefore("@")
+                        val photoUrl = account.photoUrl?.toString()
+                        val idToken = account.idToken
+
+                        BrowserPreferences.saveSyncedAccount(
+                            this,
+                            name = name,
+                            email = email,
+                            photoUrl = photoUrl
+                        )
+
+                        Toast.makeText(this, "Synced with Google: $name ($email)", Toast.LENGTH_SHORT).show()
+                        updateProfileStatusUI()
+
+                        if (!idToken.isNullOrBlank()) {
+                            passCredentialToWebView(idToken, email)
+                        }
+                    },
+                    onError = { errorMessage ->
+                        Toast.makeText(this, errorMessage, Toast.LENGTH_SHORT).show()
+                        updateProfileStatusUI()
+                    }
+                )
+            } else {
+                Toast.makeText(this, "Sign in cancelled", Toast.LENGTH_SHORT).show()
+                updateProfileStatusUI()
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Apply saved theme mode before inflating view
         BrowserPreferences.applyTheme(BrowserPreferences.getThemeMode(this))
@@ -74,6 +159,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        setupDownloadReceiver()
         setupWebView()
         setupTopAddressBar()
         setupHomeShortcuts()
@@ -367,6 +453,134 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        // Intercept file download requests (PDF, images, APK, videos) using Android's native DownloadManager
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
+            handleDownloadRequest(url, userAgent, contentDisposition, mimeType)
+        }
+    }
+
+    private fun setupDownloadReceiver() {
+        downloadCompleteReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == DownloadManager.ACTION_DOWNLOAD_COMPLETE) {
+                    val downloadId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
+                    if (downloadId != -1L) {
+                        handleDownloadCompletion(downloadId)
+                    }
+                }
+            }
+        }
+        val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(downloadCompleteReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(downloadCompleteReceiver, filter)
+        }
+    }
+
+    private fun handleDownloadCompletion(downloadId: Long) {
+        val dm = getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return
+        val query = DownloadManager.Query().setFilterById(downloadId)
+        dm.query(query)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                val status = if (statusIndex != -1) cursor.getInt(statusIndex) else -1
+
+                val titleIndex = cursor.getColumnIndex(DownloadManager.COLUMN_TITLE)
+                val title = if (titleIndex != -1) cursor.getString(titleIndex) ?: "file" else "file"
+
+                val sizeIndex = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+                val totalSize = if (sizeIndex != -1) cursor.getLong(sizeIndex) else 0L
+
+                val uriIndex = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
+                val localUriStr = if (uriIndex != -1) cursor.getString(uriIndex) else null
+                val filePath = localUriStr?.let { Uri.parse(it).path }
+
+                if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                    DownloadHistoryStore.updateStatus(
+                        context = this,
+                        id = downloadId,
+                        status = "COMPLETED",
+                        filePath = filePath,
+                        fileSize = if (totalSize > 0) totalSize else null
+                    )
+                    Toast.makeText(this, "Download complete: $title", Toast.LENGTH_SHORT).show()
+                } else if (status == DownloadManager.STATUS_FAILED) {
+                    DownloadHistoryStore.updateStatus(
+                        context = this,
+                        id = downloadId,
+                        status = "FAILED"
+                    )
+                    Toast.makeText(this, "Download failed: $title", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+    private fun handleDownloadRequest(
+        url: String,
+        userAgent: String,
+        contentDisposition: String?,
+        mimeType: String?
+    ) {
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                pendingDownloadUrl = url
+                pendingDownloadUserAgent = userAgent
+                pendingDownloadContentDisposition = contentDisposition
+                pendingDownloadMimeType = mimeType
+                requestStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                return
+            }
+        }
+        executeNativeDownload(url, userAgent, contentDisposition, mimeType)
+    }
+
+    private fun executeNativeDownload(
+        url: String,
+        userAgent: String,
+        contentDisposition: String?,
+        mimeType: String?
+    ) {
+        try {
+            val guessFileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
+            val request = DownloadManager.Request(Uri.parse(url)).apply {
+                setMimeType(mimeType)
+                val cookies = CookieManager.getInstance().getCookie(url)
+                if (!cookies.isNullOrEmpty()) {
+                    addRequestHeader("cookie", cookies)
+                }
+                addRequestHeader("User-Agent", userAgent)
+                setDescription("Downloading $guessFileName")
+                setTitle(guessFileName)
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, guessFileName)
+            }
+
+            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+            if (dm != null) {
+                val downloadId = dm.enqueue(request)
+                // Track in in-app DownloadHistoryStore
+                val item = DownloadItem(
+                    id = downloadId,
+                    fileName = guessFileName,
+                    url = url,
+                    filePath = null,
+                    mimeType = mimeType,
+                    fileSize = 0L,
+                    status = "DOWNLOADING",
+                    timestamp = System.currentTimeMillis()
+                )
+                DownloadHistoryStore.addOrUpdateDownload(this, item)
+                Toast.makeText(this, "Downloading $guessFileName...", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Download Manager unavailable", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     // -------------------------------------------------------------
@@ -422,79 +636,157 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showBrowserPopupMenu(anchorView: View) {
-        val popup = PopupMenu(this, anchorView)
-        popup.menuInflater.inflate(R.menu.browser_menu, popup.menu)
+        val inflater = LayoutInflater.from(this)
+        val menuBinding = PopupChromeMenuBinding.inflate(inflater, null, false)
 
-        // Set Desktop Site check state
-        val desktopItem = popup.menu.findItem(R.id.menu_desktop_site)
-        val isDesktop = BrowserPreferences.isDesktopMode(this)
-        desktopItem.isChecked = isDesktop
-
-        // Update Incognito menu item title
-        val incognitoItem = popup.menu.findItem(R.id.menu_incognito)
-        if (isIncognitoMode) {
-            incognitoItem.title = getString(R.string.exit_incognito)
-            incognitoItem.setIcon(R.drawable.ic_close)
-        } else {
-            incognitoItem.title = getString(R.string.new_incognito_tab)
-            incognitoItem.setIcon(R.drawable.ic_incognito)
+        val popupWindow = PopupWindow(
+            menuBinding.root,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            elevation = 16f
+            setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
+            isOutsideTouchable = true
         }
 
-        popup.setOnMenuItemClickListener { menuItem ->
-            when (menuItem.itemId) {
-                R.id.menu_forward -> {
-                    if (binding.webView.canGoForward()) {
-                        binding.webView.goForward()
-                    }
-                    true
-                }
-                R.id.menu_reload -> {
-                    binding.webView.reload()
-                    true
-                }
-                R.id.menu_home -> {
-                    if (isIncognitoMode) {
-                        showIncognitoLandingPage()
-                    } else {
-                        showHomeTab()
-                    }
-                    true
-                }
-                R.id.menu_incognito -> {
-                    if (isIncognitoMode) {
-                        exitIncognitoMode()
-                    } else {
-                        enterIncognitoMode()
-                    }
-                    true
-                }
-                R.id.menu_desktop_site -> {
-                    val newMode = !menuItem.isChecked
-                    menuItem.isChecked = newMode
-                    BrowserPreferences.setDesktopMode(this, newMode)
-                    binding.webView.settings.userAgentString =
-                        if (newMode) desktopUserAgent else defaultUserAgent
-                    binding.webView.reload()
-                    Toast.makeText(
-                        this,
-                        if (newMode) "Desktop site enabled" else "Mobile site enabled",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    true
-                }
-                R.id.menu_clear_cache -> {
-                    binding.webView.clearCache(true)
-                    Toast.makeText(this, "Browsing cache cleared", Toast.LENGTH_SHORT).show()
-                    true
-                }
-                R.id.menu_settings -> {
-                    startActivity(Intent(this, SettingsActivity::class.java))
-                    true
-                }
-                else -> false
+        // Apply incognito visual styling to menu if active
+        if (isIncognitoMode) {
+            menuBinding.chromeMenuContainer.setBackgroundResource(R.drawable.bg_chrome_menu_incognito)
+            menuBinding.tvMenuIncognitoTitle.text = getString(R.string.exit_incognito)
+            menuBinding.ivMenuIncognitoIcon.setImageResource(R.drawable.ic_close)
+        } else {
+            menuBinding.chromeMenuContainer.setBackgroundResource(R.drawable.bg_chrome_menu)
+            menuBinding.tvMenuIncognitoTitle.text = getString(R.string.new_incognito_tab)
+            menuBinding.ivMenuIncognitoIcon.setImageResource(R.drawable.ic_incognito)
+        }
+
+        // Desktop site checkbox state
+        val isDesktop = BrowserPreferences.isDesktopMode(this)
+        menuBinding.menuCbDesktopSite.isChecked = isDesktop
+
+        // Quick Action 1: Forward
+        menuBinding.menuBtnForward.isEnabled = binding.webView.canGoForward()
+        menuBinding.menuBtnForward.alpha = if (binding.webView.canGoForward()) 1.0f else 0.4f
+        menuBinding.menuBtnForward.setOnClickListener {
+            popupWindow.dismiss()
+            if (binding.webView.canGoForward()) {
+                binding.webView.goForward()
             }
         }
-        popup.show()
+
+        // Quick Action 2: Reload
+        menuBinding.menuBtnReload.setOnClickListener {
+            popupWindow.dismiss()
+            binding.webView.reload()
+        }
+
+        // Quick Action 3: Bookmark
+        menuBinding.menuBtnBookmark.setOnClickListener {
+            popupWindow.dismiss()
+            val currentUrl = binding.webView.url ?: ""
+            val currentTitle = binding.webView.title ?: "Page"
+            if (currentUrl.isNotBlank()) {
+                Toast.makeText(this, "Bookmarked: $currentTitle", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Cannot bookmark blank page", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Quick Action 4: Download Page / File
+        menuBinding.menuBtnDownload.setOnClickListener {
+            popupWindow.dismiss()
+            val currentUrl = binding.webView.url
+            if (!currentUrl.isNullOrBlank() && (currentUrl.startsWith("http://") || currentUrl.startsWith("https://"))) {
+                handleDownloadRequest(
+                    url = currentUrl,
+                    userAgent = binding.webView.settings.userAgentString,
+                    contentDisposition = null,
+                    mimeType = null
+                )
+            } else {
+                Toast.makeText(this, "Nothing to download on this page", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Quick Action 5: Page Info
+        menuBinding.menuBtnInfo.setOnClickListener {
+            popupWindow.dismiss()
+            val currentUrl = binding.webView.url ?: "None"
+            val isSecure = currentUrl.startsWith("https://")
+            MaterialAlertDialogBuilder(this)
+                .setTitle(if (isSecure) "Connection is secure" else "Connection not secure")
+                .setMessage("URL: $currentUrl\n\nSecurity: ${if (isSecure) "Encrypted with HTTPS" else "Unencrypted HTTP"}")
+                .setPositiveButton("OK", null)
+                .show()
+        }
+
+        // Menu Item: New Tab
+        menuBinding.menuRowNewTab.setOnClickListener {
+            popupWindow.dismiss()
+            if (isIncognitoMode) {
+                exitIncognitoMode()
+            }
+            showHomeTab()
+        }
+
+        // Menu Item: New Incognito Tab / Exit Incognito
+        menuBinding.menuRowIncognito.setOnClickListener {
+            popupWindow.dismiss()
+            if (isIncognitoMode) {
+                exitIncognitoMode()
+            } else {
+                enterIncognitoMode()
+            }
+        }
+
+        // Menu Item: History
+        menuBinding.menuRowHistory.setOnClickListener {
+            popupWindow.dismiss()
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Browsing History")
+                .setMessage("Recent tabs and synced history are enabled with your Google Account.")
+                .setPositiveButton("Close", null)
+                .show()
+        }
+
+        // Menu Item: Downloads History
+        menuBinding.menuRowDownloads.setOnClickListener {
+            popupWindow.dismiss()
+            startActivity(Intent(this, DownloadsActivity::class.java))
+        }
+
+        // Menu Item: Desktop site
+        menuBinding.menuRowDesktopSite.setOnClickListener {
+            popupWindow.dismiss()
+            val newMode = !menuBinding.menuCbDesktopSite.isChecked
+            menuBinding.menuCbDesktopSite.isChecked = newMode
+            BrowserPreferences.setDesktopMode(this, newMode)
+            binding.webView.settings.userAgentString =
+                if (newMode) desktopUserAgent else defaultUserAgent
+            binding.webView.reload()
+            Toast.makeText(
+                this,
+                if (newMode) "Desktop site enabled" else "Mobile site enabled",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        // Menu Item: Clear Browsing Data
+        menuBinding.menuRowClearData.setOnClickListener {
+            popupWindow.dismiss()
+            binding.webView.clearCache(true)
+            Toast.makeText(this, "Browsing cache cleared", Toast.LENGTH_SHORT).show()
+        }
+
+        // Menu Item: Settings
+        menuBinding.menuRowSettings.setOnClickListener {
+            popupWindow.dismiss()
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
+        // Anchor popup under the 3-dot button
+        popupWindow.showAsDropDown(anchorView, -180, 0, Gravity.NO_GRAVITY)
     }
 
     // -------------------------------------------------------------
@@ -674,9 +966,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     // -------------------------------------------------------------
-    // Google Identity / Credential Manager Integration
+    // Google Identity / GIS Integration
     // -------------------------------------------------------------
     private fun setupProfileAndSync() {
+        googleSignInClient = GoogleAuthHelper.getGoogleSignInClient(this)
+
         binding.profileContainer.setOnClickListener {
             triggerGoogleSignIn()
         }
@@ -684,44 +978,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun triggerGoogleSignIn() {
-        val (currentName, currentEmail) = BrowserPreferences.getSyncedAccount(this)
-        if (currentName != null && currentEmail != null) {
+        val (currentName, currentEmail, _) = BrowserPreferences.getSyncedAccount(this)
+        if (!currentName.isNullOrBlank() && !currentEmail.isNullOrBlank()) {
             // Already synced, open settings
             startActivity(Intent(this, SettingsActivity::class.java))
             return
         }
 
-        GoogleAuthHelper.signIn(
-            activity = this,
-            scope = lifecycleScope,
-            onSuccess = { name, email, token ->
-                Toast.makeText(this, "Synced with Google: $name ($email)", Toast.LENGTH_SHORT).show()
-                updateProfileStatusUI()
-                if (token != null) {
-                    passCredentialToWebView(token, email)
-                }
-            },
-            onError = { error ->
-                Toast.makeText(this, "Google Sign-In: $error", Toast.LENGTH_SHORT).show()
-            }
-        )
+        GoogleAuthHelper.startSignIn(googleSignInClient) { intent ->
+            googleSignInLauncher.launch(intent)
+        }
     }
 
     private fun triggerGoogleSignInForWeb() {
-        GoogleAuthHelper.signIn(
-            activity = this,
-            scope = lifecycleScope,
-            onSuccess = { name, email, token ->
-                Toast.makeText(this, "Signed in as $name for site", Toast.LENGTH_SHORT).show()
-                updateProfileStatusUI()
-                if (token != null) {
-                    passCredentialToWebView(token, email)
-                }
-            },
-            onError = { error ->
-                Toast.makeText(this, "Sign-in cancelled", Toast.LENGTH_SHORT).show()
-            }
-        )
+        GoogleAuthHelper.startSignIn(googleSignInClient) { intent ->
+            googleSignInLauncher.launch(intent)
+        }
     }
 
     private fun passCredentialToWebView(token: String, email: String) {
@@ -737,16 +1009,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateProfileStatusUI() {
-        val (name, email) = BrowserPreferences.getSyncedAccount(this)
+        val (name, email, photoUrl) = BrowserPreferences.getSyncedAccount(this)
         if (name != null && email != null) {
             binding.viewSyncStatusBadge.visibility = View.VISIBLE
             binding.viewSyncStatusBadge.setBackgroundColor(
                 ContextCompat.getColor(this, R.color.google_green)
             )
             binding.tvSyncStatus.text = "Synced: $name"
+
+            // Update profile icon in toolbar
+            if (!photoUrl.isNullOrBlank()) {
+                ImageLoaderHelper.loadCircularImage(
+                    lifecycleScope,
+                    binding.ivProfile,
+                    photoUrl
+                )
+            } else {
+                binding.ivProfile.setImageResource(R.drawable.ic_account_circle)
+            }
         } else {
             binding.viewSyncStatusBadge.visibility = View.GONE
             binding.tvSyncStatus.text = getString(R.string.account_not_signed_in)
+            binding.ivProfile.setImageResource(R.drawable.ic_account_circle)
         }
     }
 
@@ -861,6 +1145,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        downloadCompleteReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (_: Exception) {}
+            downloadCompleteReceiver = null
+        }
         binding.webView.destroy()
         super.onDestroy()
     }

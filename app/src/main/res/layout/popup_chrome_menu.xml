@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/chromeMenuContainer"
+    android:layout_width="280dp"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_chrome_menu"
+    android:elevation="8dp"
+    android:orientation="vertical"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <!-- Top Quick Action Row (Icons: Forward, Reload, Bookmark, Download, Page Info) -->
+    <LinearLayout
+        android:id="@+id/menuQuickActionRow"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp">
+
+        <!-- Forward -->
+        <ImageButton
+            android:id="@+id/menuBtnForward"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Forward"
+            android:padding="10dp"
+            android:src="@drawable/ic_arrow_forward"
+            app:tint="@color/browser_text_primary" />
+
+        <!-- Reload -->
+        <ImageButton
+            android:id="@+id/menuBtnReload"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Reload"
+            android:padding="10dp"
+            android:src="@drawable/ic_refresh"
+            app:tint="@color/browser_text_primary" />
+
+        <!-- Bookmark -->
+        <ImageButton
+            android:id="@+id/menuBtnBookmark"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Bookmark"
+            android:padding="10dp"
+            android:src="@drawable/ic_bookmark"
+            app:tint="@color/browser_text_primary" />
+
+        <!-- Download Page / File -->
+        <ImageButton
+            android:id="@+id/menuBtnDownload"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Download page or link"
+            android:padding="10dp"
+            android:src="@drawable/ic_download"
+            app:tint="@color/browser_text_primary" />
+
+        <!-- Page Info -->
+        <ImageButton
+            android:id="@+id/menuBtnInfo"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Page info"
+            android:padding="10dp"
+            android:src="@drawable/ic_info"
+            app:tint="@color/browser_text_primary" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="6dp"
+        android:background="@color/browser_divider" />
+
+    <!-- List Items -->
+    <!-- New Tab -->
+    <LinearLayout
+        android:id="@+id/menuRowNewTab"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="New tab"
+            android:src="@drawable/ic_add"
+            app:tint="@color/browser_text_secondary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="New tab"
+            android:textColor="@color/browser_text_primary"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <!-- New Incognito Tab -->
+    <LinearLayout
+        android:id="@+id/menuRowIncognito"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <ImageView
+            android:id="@+id/ivMenuIncognitoIcon"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="Incognito"
+            android:src="@drawable/ic_incognito"
+            app:tint="@color/browser_text_secondary" />
+
+        <TextView
+            android:id="@+id/tvMenuIncognitoTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="@string/new_incognito_tab"
+            android:textColor="@color/browser_text_primary"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <!-- History -->
+    <LinearLayout
+        android:id="@+id/menuRowHistory"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="History"
+            android:src="@drawable/ic_history"
+            app:tint="@color/browser_text_secondary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="History"
+            android:textColor="@color/browser_text_primary"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <!-- Downloads Manager -->
+    <LinearLayout
+        android:id="@+id/menuRowDownloads"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="Downloads"
+            android:src="@drawable/ic_download"
+            app:tint="@color/browser_text_secondary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="Downloads History"
+            android:textColor="@color/browser_text_primary"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="4dp"
+        android:background="@color/browser_divider" />
+
+    <!-- Desktop site (with Checkbox) -->
+    <LinearLayout
+        android:id="@+id/menuRowDesktopSite"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="Desktop site"
+            android:src="@drawable/ic_desktop"
+            app:tint="@color/browser_text_secondary" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_weight="1"
+            android:text="Desktop site"
+            android:textColor="@color/browser_text_primary"
+            android:textSize="15sp" />
+
+        <com.google.android.material.checkbox.MaterialCheckBox
+            android:id="@+id/menuCbDesktopSite"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:clickable="false"
+            android:focusable="false" />
+    </LinearLayout>
+
+    <!-- Clear Browsing Data -->
+    <LinearLayout
+        android:id="@+id/menuRowClearData"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="Clear data"
+            android:src="@drawable/ic_shield"
+            app:tint="@color/browser_text_secondary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="Clear Browsing Data"
+            android:textColor="@color/browser_text_primary"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="4dp"
+        android:background="@color/browser_divider" />
+
+    <!-- Settings -->
+    <LinearLayout
+        android:id="@+id/menuRowSettings"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="Settings"
+            android:src="@drawable/ic_tune"
+            app:tint="@color/browser_text_secondary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="@string/settings"
+            android:textColor="@color/browser_text_primary"
+            android:textSize="15sp" />
+    </LinearLayout>
+</LinearLayout>
